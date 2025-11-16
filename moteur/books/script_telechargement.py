@@ -1,11 +1,10 @@
 import requests
-import json
 import time
 import re
 import os
 
 # Dossier où on sauvegarde les fichiers
-OUTPUT_DIR = "."
+OUTPUT_DIR = "gutendex_books"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_books_page(page_url=None):
@@ -28,13 +27,17 @@ def sanitize_filename(name):
     """Nettoie un nom de fichier pour enlever les caractères interdits."""
     return re.sub(r'[\\/*?:"<>|]', "_", name)
 
-def save_book_json(book_info):
-    """Sauvegarde les informations d’un livre dans un fichier JSON."""
-    title_sanitized = sanitize_filename(book_info['title'])
-    filename = f"{book_info['id']}_{title_sanitized}.json"
+def count_words(text):
+    """Compte le nombre de mots dans un texte."""
+    return len(text.split())
+
+def save_book_txt(book_id, title, text):
+    """Sauvegarde un livre dans un fichier texte."""
+    title_sanitized = sanitize_filename(title)
+    filename = f"{book_id}_{title_sanitized}.txt"
     filepath = os.path.join(OUTPUT_DIR, filename)
     with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(book_info, f, ensure_ascii=False, indent=2)
+        f.write(text)
     print(f"-> Livre sauvegardé : {filename}")
 
 def main():
@@ -46,17 +49,10 @@ def main():
         for book in data['results']:
             formats = book.get('formats', {})
             text = download_plain_text(formats)
-            if text and len(text) > 10000:
-                book_info = {
-                    'id': book['id'],
-                    'title': book['title'],
-                    'authors': [a['name'] for a in book.get('authors', [])],
-                    'length': len(text),
-                    'text': text
-                }
-                save_book_json(book_info)
+            if text and count_words(text) >= 10000:
+                save_book_txt(book['id'], book['title'], text)
                 found_books_count += 1
-                print(f"[{found_books_count}/1664] {book['title']} ({len(text)} chars)")
+                print(f"[{found_books_count}/1664] {book['title']} ({count_words(text)} mots)")
 
             if found_books_count >= 1664:
                 break
@@ -66,7 +62,7 @@ def main():
             print("Plus de pages disponibles dans l'API.")
             break
 
-        time.sleep(0.5)  # Respect de l'API
+        time.sleep(0.5)  # Pause pour respecter l'API
 
     print(f"\nTerminé ! Total livres sauvegardés : {found_books_count}")
 
