@@ -1,3 +1,4 @@
+from .regex_index import search_regex_in_index
 import json
 import os
 from django.shortcuts import render
@@ -28,8 +29,10 @@ def search_books(keyword):
 def index(request):
     results_books = []
     results_index = []
+    results_regex = []
     keyword_books = ""
     keyword_index = ""
+    regex_query = ""
 
     if request.method == "POST":
         # recherche classique
@@ -44,9 +47,28 @@ def index(request):
                 results_index.append({"id": book_id, "count": count})
             results_index = sorted(results_index, key=lambda x: x["count"], reverse=True)
 
+        regex_query = request.POST.get("regex", "").strip()
+        if regex_query:
+            try:
+                results_regex = search_regex_in_index(regex_query, INDEX)
+                id_to_filename = {}
+                for filename in os.listdir(BOOKS_DIR):
+                    if filename.endswith(".txt"):
+                        book_id_part = filename.split("_", 1)[0]
+                        id_to_filename[book_id_part] = filename
+
+                # Ajouter le filename à chaque entrée
+                for entry in results_regex:
+                    entry_id_str = str(entry["id"])
+                    entry["filename"] = id_to_filename.get(entry_id_str, entry_id_str)
+            except Exception:
+                results_regex = []
+
     return render(request, "searchapp/index.html", {
         "results_books": results_books,
         "results_index": results_index,
+        "results_regex": results_regex,
         "keyword_books": keyword_books,
-        "keyword_index": keyword_index
+        "keyword_index": keyword_index,
+        "regex_query": regex_query,
     })

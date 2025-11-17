@@ -5,6 +5,13 @@
     <button type="submit">Rechercher</button>
 </form>
 
+<!-- Formulaire recherche regex -->
+<form method="post">
+    {% csrf_token %}
+    <input type="text" name="regex" placeholder="Recherche regex" value="{{ regex_query }}">
+    <button type="submit">Rechercher (regex)</button>
+</form>
+
 <!-- Formulaire recherche par index -->
 <form method="post">
     {% csrf_token %}
@@ -30,4 +37,14 @@
         <li>{{ book.id }} ({{ book.count }} occurrences)</li>
     {% endfor %}
     </ul>
+{% endif %}
+
+<!-- Résultats recherche regex -->
+{% if results_regex %}
+<h2>Résultats recherche regex :</h2>
+<ul>
+{% for book in results_regex %}
+<li>{{ book.filename }} ({{ book.count }} occurrences)</li>
+{% endfor %}
+</ul>
 {% endif %}
