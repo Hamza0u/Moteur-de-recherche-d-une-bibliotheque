@@ -1,50 +1,130 @@
-<!-- Formulaire recherche classique -->
-<form method="post">
-    {% csrf_token %}
-    <input type="text" name="keyword" placeholder="Recherche complète" value="{{ keyword_books }}">
-    <button type="submit">Rechercher</button>
-</form>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Moteur de recherche Gutenberg</title>
 
-<!-- Formulaire recherche regex -->
-<form method="post">
-    {% csrf_token %}
-    <input type="text" name="regex" placeholder="Recherche regex" value="{{ regex_query }}">
-    <button type="submit">Rechercher (regex)</button>
-</form>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #fafafa;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h2 {
+            margin-top: 30px;
+            color: #333;
+        }
+        .block {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        input[type="text"] {
+            width: 250px;
+            padding: 8px;
+            border: 1px solid #bbb;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 5px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #217dbb;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            background: #f1f1f1;
+            margin: 5px 0;
+            padding: 8px 10px;
+            border-radius: 5px;
+        }
+        .occ {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
 
-<!-- Formulaire recherche par index -->
-<form method="post">
-    {% csrf_token %}
-    <input type="text" name="mot" placeholder="Recherche par index" value="{{ keyword_index }}">
-    <button type="submit">Rechercher</button>
-</form>
+<h1>Moteur de recherche Gutenberg</h1>
+
+
+<!-- Recherche classique -->
+<div class="block">
+    <h2>Recherche dans les fichiers texte</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="keyword" placeholder="Recherche complète" value="{{ keyword_books }}">
+        <button type="submit">Rechercher</button>
+    </form>
+</div>
+
+
+<!-- Recherche regex -->
+<div class="block">
+    <h2>Recherche avec Regex</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="regex" placeholder="Expression régulière" value="{{ regex_query }}">
+        <button type="submit">Rechercher (regex)</button>
+    </form>
+</div>
+
+
+<!-- Recherche par index inversé -->
+<div class="block">
+    <h2>Recherche par Index</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" name="mot" placeholder="Mot indexé" value="{{ keyword_index }}">
+        <button type="submit">Rechercher</button>
+    </form>
+</div>
+
+
 
 <!-- Résultats recherche classique -->
 {% if results_books %}
-    <h2>Résultats recherche classique :</h2>
+    <h2>Résultats recherche complète :</h2>
     <ul>
-    {% for book in results_books %}
-        <li>{{ book }}</li>
-    {% endfor %}
+        {% for title in results_books %}
+            <li>{{ title }}</li>
+        {% endfor %}
     </ul>
 {% endif %}
 
-<!-- Résultats recherche par index -->
+
+<!-- Résultats recherche index -->
 {% if results_index %}
-    <h2>Résultats recherche par index :</h2>
+    <h2>Résultats (index inversé) :</h2>
     <ul>
-    {% for book in results_index %}
-        <li>{{ book.id }} ({{ book.count }} occurrences)</li>
-    {% endfor %}
+        {% for book in results_index %}
+            <li>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></li>
+        {% endfor %}
     </ul>
 {% endif %}
 
-<!-- Résultats recherche regex -->
+
+<!-- Résultats regex -->
 {% if results_regex %}
-<h2>Résultats recherche regex :</h2>
-<ul>
-{% for book in results_regex %}
-<li>{{ book.filename }} ({{ book.count }} occurrences)</li>
-{% endfor %}
-</ul>
+    <h2>Résultats regex :</h2>
+    <ul>
+        {% for book in results_regex %}
+            <li>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></li>
+        {% endfor %}
+    </ul>
 {% endif %}
+
+</body>
+</html>
