@@ -1,18 +1,16 @@
 import os
-import json
 from django.shortcuts import render
 from django.conf import settings
-from .regex_index import search_regex_in_index
+from elasticsearch import Elasticsearch
+from .regex_index import search_regex_in_index  # ton moteur regex existant
 
-# chemins
-INDEX_FILE = os.path.join(settings.BASE_DIR, "moteur", "books", "index.json")
+# --- Connexion à Elasticsearch --- #
+es = Elasticsearch("http://localhost:9200")
+
+# --- Répertoire des livres --- #
 BOOKS_DIR = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")
 
-# --- Charger l'index JSON --- #
-with open(INDEX_FILE, "r", encoding="utf-8") as f:
-    INDEX = json.load(f)
-
-# --- Construction mapping ID → titre --- #
+# --- Mapping ID → titre --- #
 def build_book_info():
     info = {}
     for filename in os.listdir(BOOKS_DIR):
@@ -24,67 +22,76 @@ def build_book_info():
 
 BOOK_INFO = build_book_info()
 
-# --- 🔍 Recherche texte complète --- #
-def search_books(keyword):
-    results = []
-    keyword_lower = keyword.lower()
-    for filename in os.listdir(BOOKS_DIR):
-        if filename.endswith(".txt"):
-            filepath = os.path.join(BOOKS_DIR, filename)
-            with open(filepath, "r", encoding="utf-8") as f:
-                content = f.read()
-                if keyword_lower in content.lower():
-                    book_id = filename.split("_", 1)[0]
-                    results.append(BOOK_INFO.get(book_id, filename))
+
+# --- Fonction de recherche regex sur ES --- #
+def search_regex_in_es(pattern):
+    """Utilise ton moteur regex local sur l'index inversé stocké dans ES."""
+    # Récupérer tous les termes
+    resp = es.search(
+        index="inverse_index",
+        body={"query": {"match_all": {}}},
+        size=10000  # adapter si plus de termes
+    )
+    
+    # Recréer un dict pour le moteur regex
+    temp_index = {hit["_source"]["term"]: hit["_source"]["books"] for hit in resp["hits"]["hits"]}
+    
+    results = search_regex_in_index(pattern, temp_index)
+    
+    # Ajouter les titres des livres
+    for entry in results:
+        book_id = str(entry["id"])
+        entry["title"] = BOOK_INFO.get(book_id, f"Livre {book_id}")
+    
     return results
 
 
-# --- 🏠 Page principale --- #
+# --- View principale --- #
 def index(request):
-    results_books = []
     results_index = []
     results_regex = []
-    keyword_books = ""
     keyword_index = ""
     regex_query = ""
 
     if request.method == "POST":
+        # ----- Recherche mot-clé exact dans ES ----- #
+        keyword_index = request.POST.get("mot", "").strip()
+        if keyword_index:
+            resp = es.search(
+                index="inverse_index",
+                body={
+                    "query": {
+                        "match": {
+                            "term": keyword_index  # insensible à la casse si l’analyzer le permet
+                        }
+                    }
+                }
+            )
+           
+            results_index = []
+            for hit in resp["hits"]["hits"]:
+                books = hit["_source"]["books"]
+                results_index.extend([
+                    {
+                        "id": book_id,
+                        "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
+                        "count": count
+                    }
+                    for book_id, count in books.items()
+                ])
+            results_index.sort(key=lambda x: x["count"], reverse=True)
 
-        # ----- Recherche classique ----- #
-        keyword_books = request.POST.get("keyword", "").strip()
-        if keyword_books:
-            results_books = search_books(keyword_books)
-
-        # ----- Recherche via index JSON ----- #
-        keyword_index = request.POST.get("mot", "").strip().lower()
-        if keyword_index in INDEX:
-            for book_id, count in INDEX[keyword_index].items():
-                results_index.append({
-                    "id": book_id,
-                    "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
-                    "count": count
-                })
-            results_index = sorted(results_index, key=lambda x: x["count"], reverse=True)
-
-        # ----- Recherche regex ----- #
+        # ----- Recherche regex sur l'index inversé ES ----- #
         regex_query = request.POST.get("regex", "").strip()
         if regex_query:
             try:
-                results_regex = search_regex_in_index(regex_query, INDEX)
-
-                # Retrouver le nom complet du livre
-                for entry in results_regex:
-                    book_id = str(entry["id"])
-                    entry["title"] = BOOK_INFO.get(book_id, f"Livre {book_id}")
-
+                results_regex = search_regex_in_es(regex_query)
             except Exception:
                 results_regex = []
 
     return render(request, "searchapp/index.html", {
-        "results_books": results_books,
         "results_index": results_index,
         "results_regex": results_regex,
-        "keyword_books": keyword_books,
         "keyword_index": keyword_index,
         "regex_query": regex_query,
     })
