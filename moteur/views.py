@@ -3,9 +3,29 @@ from django.shortcuts import render
 from django.conf import settings
 from elasticsearch import Elasticsearch
 from .regex_index import search_regex_in_index  # ton moteur regex existant
-
+from django.http import Http404
+from django.conf import settings
 # --- Connexion à Elasticsearch --- #
 es = Elasticsearch("http://localhost:9200")
+
+
+
+def display_book(request, book_id):
+    # reconstruire le nom du fichier correspondant
+    for filename in os.listdir(BOOKS_DIR):
+        if filename.startswith(str(book_id) + "_") and filename.endswith(".txt"):
+            filepath = os.path.join(BOOKS_DIR, filename)
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+
+            return render(request, "book_view.html", {
+                "book_id": book_id,
+                "content": content,
+                "title": filename
+            })
+
+    raise Http404("Livre introuvable")
+
 
 # --- Répertoire des livres --- #
 BOOKS_DIR = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")

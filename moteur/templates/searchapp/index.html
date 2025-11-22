@@ -12,15 +12,17 @@
         button { padding: 8px 15px; border: none; border-radius: 5px; background: #3498db; color: white; cursor: pointer; }
         button:hover { background: #217dbb; }
         ul { list-style: none; padding: 0; }
-        li { background: #f1f1f1; margin: 5px 0; padding: 8px 10px; border-radius: 5px; }
+        li { background: #f1f1f1; margin: 5px 0; padding: 8px 10px; border-radius: 5px; display:flex; justify-content:space-between; align-items:center; }
         .occ { color: #666; font-size: 0.9em; margin-left: 5px; }
+        .btn { padding: 5px 10px; border-radius: 5px; background:#2ecc71; color:white; text-decoration:none; }
+        .btn:hover { background:#27ae60; }
     </style>
 </head>
 <body>
 
 <h1>Moteur de recherche Gutenberg</h1>
 
-<!-- Recherche par index inversé -->
+<!-- Recherche mot-clé -->
 <div class="block">
     <h2>Recherche par mot-clé</h2>
     <form method="post">
@@ -40,23 +42,29 @@
     </form>
 </div>
 
-<!-- Résultats recherche par mot-clé -->
+<!-- Résultats mot-clé -->
 {% if results_index %}
-    <h2>Résultats recherche mot-clé :</h2>
+    <h2>Résultats mot-clé :</h2>
     <ul>
-        {% for book in results_index %}
-            <li>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></li>
-        {% endfor %}
+    {% for book in results_index %}
+        <li>
+            <span>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></span>
+            <a href="{% url 'display_book' book.id %}" class="btn">Voir le livre</a>
+        </li>
+    {% endfor %}
     </ul>
 {% endif %}
 
-<!-- Résultats recherche regex -->
+<!-- Résultats regex -->
 {% if results_regex %}
-    <h2>Résultats recherche Regex :</h2>
+    <h2>Résultats Regex :</h2>
     <ul>
-        {% for book in results_regex %}
-            <li>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></li>
-        {% endfor %}
+    {% for book in results_regex %}
+        <li>
+            <span>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></span>
+            <a href="{% url 'display_book' book.id %}" class="btn">Voir le livre</a>
+        </li>
+    {% endfor %}
     </ul>
 {% endif %}
 
