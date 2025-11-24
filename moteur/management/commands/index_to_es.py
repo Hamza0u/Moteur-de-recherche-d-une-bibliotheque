@@ -1,61 +1,78 @@
-# moteur/management/commands/index_books_es.py
-
 import os
-import json
+import re
+from collections import defaultdict
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 
 class Command(BaseCommand):
-    help = "Indexe l'index inversé dans Elasticsearch avec bulk"
+    help = "Construit un index inversé et l'envoie dans Elasticsearch"
 
     def handle(self, *args, **kwargs):
+
         es = Elasticsearch("http://localhost:9200")
 
-        # Création de l'index si absent
-        if not es.indices.exists(index="books_index"):
-            es.indices.create(index="books_index", body={
-                "settings": {
-                    "analysis": {
-                        "analyzer": {
-                            "default": {
-                                "type": "standard"
-                            }
-                        }
-                    }
-                },
+        # ───────────────────────────────────────────────
+        # 1) Créer l'index ES pour accueillir { mot → livres }
+        # ───────────────────────────────────────────────
+        if not es.indices.exists(index="inverted_index"):
+            es.indices.create(index="inverted_index", body={
                 "mappings": {
                     "properties": {
                         "term": {"type": "keyword"},
-                        "books": {"type": "object"}  # {book_id: count, ...}
+                        "books": {"type": "object"}   # {book_id: freq}
                     }
                 }
             })
-            self.stdout.write(self.style.SUCCESS("Index Elasticsearch créé : books_index"))
+            self.stdout.write(self.style.SUCCESS("Index ES créé : inverted_index"))
 
-        # Charger l'index inversé JSON
-        index_file = os.path.join(settings.BASE_DIR, "moteur", "books", "index.json")
-        with open(index_file, "r", encoding="utf-8") as f:
-            index_data = json.load(f)
+        # ───────────────────────────────────────────────
+        # 2) Construire l'index inversé en Python
+        # ───────────────────────────────────────────────
+        books_dir = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")
+        inverted = defaultdict(lambda: defaultdict(int))
 
-        self.stdout.write(f"{len(index_data)} termes à indexer...")
+        count = 0
 
-        # Préparer les actions pour bulk
+        for filename in os.listdir(books_dir):
+            if not filename.endswith(".txt"):
+                continue
+
+            match = re.match(r"(\d+)", filename)
+            if not match:
+                continue
+
+            book_id = int(match.group(1))
+
+            path = os.path.join(books_dir, filename)
+            text = open(path, "r", encoding="utf-8", errors="ignore").read().lower()
+
+            words = re.findall(r"[a-zàâçéèêëîïôûùüÿñœ]+", text)
+
+            for w in words:
+                inverted[w][book_id] += 1
+
+            count += 1
+            if count % 50 == 0:
+                self.stdout.write(f"{count} livres traités...")
+
+        # ───────────────────────────────────────────────
+        # 3) Préparer le BATCH bulk pour Elasticsearch
+        # ───────────────────────────────────────────────
         actions = []
-        for i, (term, postings) in enumerate(index_data.items(), start=1):
+        for term, postings in inverted.items():
             actions.append({
-                "_index": "books_index",
+                "_index": "inverted_index",
                 "_id": term,
                 "_source": {
                     "term": term,
                     "books": postings
                 }
             })
-            # Afficher une progression tous les 1000 termes
-            if i % 1000 == 0:
-                self.stdout.write(f"{i} termes préparés...")
 
-        # Exécuter le bulk
         bulk(es, actions)
-        self.stdout.write(self.style.SUCCESS(f"Indexation terminée pour {len(actions)} termes"))
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Index inversé envoyé à ES : {len(inverted)} mots indexés."
+        ))
