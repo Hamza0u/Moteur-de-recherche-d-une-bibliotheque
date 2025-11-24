@@ -48,7 +48,7 @@ def search_regex_in_es(pattern):
     """Utilise ton moteur regex local sur l'index inversé stocké dans ES."""
     # Récupérer tous les termes
     resp = es.search(
-        index="inverse_index",
+        index="books_index",
         body={"query": {"match_all": {}}},
         size=10000  # adapter si plus de termes
     )
@@ -78,7 +78,7 @@ def index(request):
         keyword_index = request.POST.get("mot", "").strip()
         if keyword_index:
             resp = es.search(
-                index="inverse_index",
+                index="books_index",
                 body={
                     "query": {
                         "match": {
