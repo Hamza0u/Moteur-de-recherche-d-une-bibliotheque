@@ -1,8 +1,7 @@
 # management/commands/init_graph.py
 import os
-import numpy as np
+import re
 from collections import defaultdict, deque
-import random
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -22,20 +21,27 @@ class BookGraph:
         self.book_ids = []
         
         for filename in os.listdir(self.books_dir):
-            if filename.endswith(".txt"):
-                book_id = filename.split("_")[0]
-                self.book_ids.append(book_id)
+            if not filename.endswith(".txt"):
+                continue
                 
-                filepath = os.path.join(self.books_dir, filename)
-                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read().lower()
-                    
-                # Tokenization simple
-                words = set(content.split())
-                book_word_sets[book_id] = words
+            # ⬅️ MÊME EXTRACTION que dans build_inverted_index
+            match = re.match(r"(\d+)", filename)
+            if not match:
+                continue
                 
-                # Initialiser le nœud dans le graphe
-                self.graph[book_id] = {}
+            book_id = match.group(1)  # ⬅️ STRING, pas int
+            self.book_ids.append(book_id)
+            
+            filepath = os.path.join(self.books_dir, filename)
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read().lower()
+            
+            # ⬅️ MÊME TOKENIZATION que dans build_inverted_index
+            words = re.findall(r"[a-zàâçéèêëîïôûùüÿñœ]+", content)
+            book_word_sets[book_id] = set(words)
+            
+            # Initialiser le nœud dans le graphe
+            self.graph[book_id] = {}
         
         print(f"{len(self.book_ids)} livres chargés")
         

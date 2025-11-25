@@ -17,7 +17,7 @@ except ImportError:
     from init_graph import book_graph, initialize_graph
 
 # --- Connexion à Elasticsearch --- #
-es = Elasticsearch("http://localhost:9200")
+es = Elasticsearch("http://localhost:9200", timeout=60)
 
 # --- Initialisation du graphe --- #
 GRAPH_INITIALIZED = False
@@ -70,17 +70,69 @@ def display_book(request, book_id):
             })
     raise Http404("Livre introuvable")
 
-def search_regex_in_es(pattern):
-    """Utilise ton moteur regex local sur l'index inversé stocké dans ES."""
+def search_keyword_in_es(keyword):
+    """Recherche un mot-clé exact dans l'index ES (gère les parties multiples)"""
+    keyword_lower = keyword.lower()
+    
+    # Chercher toutes les parties du mot (term exact match)
     resp = es.search(
-        index="books_index",  # ⬅️ CHANGÉ ICI
-        body={"query": {"match_all": {}}},
-        size=10000
+        index="books_index",
+        body={
+            "query": {
+                "term": {
+                    "term": keyword_lower
+                }
+            }
+        },
+        size=100  # Au cas où le mot est découpé en plusieurs parties
     )
     
-    temp_index = {hit["_source"]["term"]: hit["_source"]["books"] for hit in resp["hits"]["hits"]}
+    # Fusionner toutes les parties
+    all_books = {}
+    for hit in resp["hits"]["hits"]:
+        books = hit["_source"]["books"]
+        for book_id, count in books.items():
+            # Si le livre existe déjà, additionner les occurrences
+            all_books[book_id] = all_books.get(book_id, 0) + count
+    
+    # Formater les résultats
+    results = [
+        {
+            "id": book_id,
+            "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
+            "count": count
+        }
+        for book_id, count in all_books.items()
+    ]
+    
+    return results
+
+def search_regex_in_es(pattern):
+    """Recherche regex sur l'index inversé (gère les parties multiples)"""
+    # Récupérer TOUT l'index
+    resp = es.search(
+        index="books_index",
+        body={"query": {"match_all": {}}},
+        size=10000  # Ajuster si besoin
+    )
+    
+    # Construire un index temporaire en fusionnant les parties
+    temp_index = {}
+    for hit in resp["hits"]["hits"]:
+        term = hit["_source"]["term"]
+        books = hit["_source"]["books"]
+        
+        # Si le terme existe déjà (cas des parties multiples), fusionner
+        if term in temp_index:
+            for book_id, count in books.items():
+                temp_index[term][book_id] = temp_index[term].get(book_id, 0) + count
+        else:
+            temp_index[term] = dict(books)
+    
+    # Appliquer le regex
     results = search_regex_in_index(pattern, temp_index)
     
+    # Ajouter les titres
     for entry in results:
         book_id = str(entry["id"])
         entry["title"] = BOOK_INFO.get(book_id, f"Livre {book_id}")
@@ -155,43 +207,32 @@ def index(request):
 
         # ----- Recherche mot-clé exact ----- #
         if keyword_index:
-            resp = es.search(
-                index="books_index",  # ⬅️ CHANGÉ ICI
-                body={
-                    "query": {
-                        "match": {
-                            "term": keyword_index
-                        }
-                    }
-                }
-            )
-           
-            raw_results = []
-            for hit in resp["hits"]["hits"]:
-                books = hit["_source"]["books"]
-                raw_results.extend([
-                    {
-                        "id": book_id,
-                        "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
-                        "count": count
-                    }
-                    for book_id, count in books.items()
-                ])
-
-            # Appliquer le classement sélectionné
-            if ranking_method == "occurrence":
-                results_index = rank_by_occurrence(raw_results)
-            elif ranking_method == "pagerank":
-                results_index = rank_by_pagerank(raw_results)
-            elif ranking_method == "betweenness":
-                results_index = rank_by_betweenness(raw_results)
-            elif ranking_method == "closeness":
-                results_index = rank_by_closeness(raw_results)
+            print(f"🔍 Recherche du mot: {keyword_index}")
+            
+            try:
+                raw_results = search_keyword_in_es(keyword_index)
+                print(f"📊 Résultats trouvés: {len(raw_results)}")
+                
+                # Appliquer le classement sélectionné
+                if ranking_method == "occurrence":
+                    results_index = rank_by_occurrence(raw_results)
+                elif ranking_method == "pagerank":
+                    results_index = rank_by_pagerank(raw_results)
+                elif ranking_method == "betweenness":
+                    results_index = rank_by_betweenness(raw_results)
+                elif ranking_method == "closeness":
+                    results_index = rank_by_closeness(raw_results)
+            except Exception as e:
+                print(f"❌ Erreur recherche mot-clé: {e}")
+                results_index = []
 
         # ----- Recherche regex ----- #
         if regex_query:
+            print(f"🔍 Recherche regex: {regex_query}")
+            
             try:
                 raw_regex_results = search_regex_in_es(regex_query)
+                print(f"📊 Résultats regex trouvés: {len(raw_regex_results)}")
                 
                 # Appliquer le classement sélectionné aux résultats regex
                 if ranking_method == "occurrence":
@@ -202,9 +243,8 @@ def index(request):
                     results_regex = rank_by_betweenness(raw_regex_results)
                 elif ranking_method == "closeness":
                     results_regex = rank_by_closeness(raw_regex_results)
-                    
             except Exception as e:
-                print(f"Erreur regex: {e}")
+                print(f"❌ Erreur regex: {e}")
                 results_regex = []
 
     return render(request, "searchapp/index.html", {
