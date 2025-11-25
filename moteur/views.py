@@ -2,30 +2,44 @@ import os
 from django.shortcuts import render
 from django.conf import settings
 from elasticsearch import Elasticsearch
-from .regex_index import search_regex_in_index  # ton moteur regex existant
+from .regex_index import search_regex_in_index
 from django.http import Http404
-from django.conf import settings
+
+# Import depuis management/commands
+try:
+    from .management.commands.init_graph import book_graph, initialize_graph
+except ImportError:
+    # Fallback si l'import direct ne fonctionne pas
+    import sys
+    from pathlib import Path
+    commands_path = Path(__file__).parent / 'management' / 'commands'
+    sys.path.append(str(commands_path))
+    from init_graph import book_graph, initialize_graph
+
 # --- Connexion à Elasticsearch --- #
 es = Elasticsearch("http://localhost:9200")
 
+# --- Initialisation du graphe --- #
+GRAPH_INITIALIZED = False
+PAGERANK_SCORES = {}
+BETWEENNESS_SCORES = {}
+CLOSENESS_SCORES = {}
 
-
-def display_book(request, book_id):
-    # reconstruire le nom du fichier correspondant
-    for filename in os.listdir(BOOKS_DIR):
-        if filename.startswith(str(book_id) + "_") and filename.endswith(".txt"):
-            filepath = os.path.join(BOOKS_DIR, filename)
-            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-
-            return render(request, "book_view.html", {
-                "book_id": book_id,
-                "content": content,
-                "title": filename
-            })
-
-    raise Http404("Livre introuvable")
-
+def ensure_graph_initialized():
+    """S'assure que le graphe est initialisé avec les scores calculés"""
+    global GRAPH_INITIALIZED, PAGERANK_SCORES, BETWEENNESS_SCORES, CLOSENESS_SCORES
+    
+    if not GRAPH_INITIALIZED:
+        print("🔄 Initialisation du graphe à la première requête...")
+        if initialize_graph():
+            GRAPH_INITIALIZED = True
+            # Pré-calculer tous les scores
+            PAGERANK_SCORES = book_graph.compute_pagerank()
+            BETWEENNESS_SCORES = book_graph.compute_betweenness() 
+            CLOSENESS_SCORES = book_graph.compute_closeness()
+            print("✅ Graphe initialisé et scores calculés!")
+        else:
+            print("❌ Échec de l'initialisation du graphe")
 
 # --- Répertoire des livres --- #
 BOOKS_DIR = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")
@@ -42,29 +56,88 @@ def build_book_info():
 
 BOOK_INFO = build_book_info()
 
+def display_book(request, book_id):
+    for filename in os.listdir(BOOKS_DIR):
+        if filename.startswith(str(book_id) + "_") and filename.endswith(".txt"):
+            filepath = os.path.join(BOOKS_DIR, filename)
+            with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
 
-# --- Fonction de recherche regex sur ES --- #
+            return render(request, "book_view.html", {
+                "book_id": book_id,
+                "content": content,
+                "title": filename.replace(".txt", "").split("_", 1)[1]
+            })
+    raise Http404("Livre introuvable")
+
 def search_regex_in_es(pattern):
     """Utilise ton moteur regex local sur l'index inversé stocké dans ES."""
-    # Récupérer tous les termes
     resp = es.search(
-        index="books_index",
+        index="books_index",  # ⬅️ CHANGÉ ICI
         body={"query": {"match_all": {}}},
-        size=10000  # adapter si plus de termes
+        size=10000
     )
     
-    # Recréer un dict pour le moteur regex
     temp_index = {hit["_source"]["term"]: hit["_source"]["books"] for hit in resp["hits"]["hits"]}
-    
     results = search_regex_in_index(pattern, temp_index)
     
-    # Ajouter les titres des livres
     for entry in results:
         book_id = str(entry["id"])
         entry["title"] = BOOK_INFO.get(book_id, f"Livre {book_id}")
     
     return results
 
+def rank_by_occurrence(results):
+    """Classe les résultats par nombre d'occurrences"""
+    return sorted(results, key=lambda x: x["count"], reverse=True)
+
+def rank_by_pagerank(results):
+    """Classe les résultats par PageRank"""
+    ensure_graph_initialized()
+    
+    ranked_results = []
+    for result in results:
+        book_id = str(result["id"])
+        pagerank = PAGERANK_SCORES.get(book_id, 0)
+        ranked_results.append({
+            **result,
+            "centrality_score": pagerank,
+            "score_type": "PageRank"
+        })
+    
+    return sorted(ranked_results, key=lambda x: x["centrality_score"], reverse=True)
+
+def rank_by_betweenness(results):
+    """Classe les résultats par betweenness centrality"""
+    ensure_graph_initialized()
+    
+    ranked_results = []
+    for result in results:
+        book_id = str(result["id"])
+        betweenness = BETWEENNESS_SCORES.get(book_id, 0)
+        ranked_results.append({
+            **result,
+            "centrality_score": betweenness,
+            "score_type": "Betweenness"
+        })
+    
+    return sorted(ranked_results, key=lambda x: x["centrality_score"], reverse=True)
+
+def rank_by_closeness(results):
+    """Classe les résultats par closeness centrality"""
+    ensure_graph_initialized()
+    
+    ranked_results = []
+    for result in results:
+        book_id = str(result["id"])
+        closeness = CLOSENESS_SCORES.get(book_id, 0)
+        ranked_results.append({
+            **result,
+            "centrality_score": closeness,
+            "score_type": "Closeness"
+        })
+    
+    return sorted(ranked_results, key=lambda x: x["centrality_score"], reverse=True)
 
 # --- View principale --- #
 def index(request):
@@ -72,26 +145,31 @@ def index(request):
     results_regex = []
     keyword_index = ""
     regex_query = ""
+    ranking_method = "occurrence"
 
     if request.method == "POST":
-        # ----- Recherche mot-clé exact dans ES ----- #
+        # Récupérer la méthode de classement
+        ranking_method = request.POST.get("ranking_method", "occurrence")
         keyword_index = request.POST.get("mot", "").strip()
+        regex_query = request.POST.get("regex", "").strip()
+
+        # ----- Recherche mot-clé exact ----- #
         if keyword_index:
             resp = es.search(
-                index="books_index",
+                index="books_index",  # ⬅️ CHANGÉ ICI
                 body={
                     "query": {
                         "match": {
-                            "term": keyword_index  # insensible à la casse si l’analyzer le permet
+                            "term": keyword_index
                         }
                     }
                 }
             )
            
-            results_index = []
+            raw_results = []
             for hit in resp["hits"]["hits"]:
                 books = hit["_source"]["books"]
-                results_index.extend([
+                raw_results.extend([
                     {
                         "id": book_id,
                         "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
@@ -99,14 +177,34 @@ def index(request):
                     }
                     for book_id, count in books.items()
                 ])
-            results_index.sort(key=lambda x: x["count"], reverse=True)
 
-        # ----- Recherche regex sur l'index inversé ES ----- #
-        regex_query = request.POST.get("regex", "").strip()
+            # Appliquer le classement sélectionné
+            if ranking_method == "occurrence":
+                results_index = rank_by_occurrence(raw_results)
+            elif ranking_method == "pagerank":
+                results_index = rank_by_pagerank(raw_results)
+            elif ranking_method == "betweenness":
+                results_index = rank_by_betweenness(raw_results)
+            elif ranking_method == "closeness":
+                results_index = rank_by_closeness(raw_results)
+
+        # ----- Recherche regex ----- #
         if regex_query:
             try:
-                results_regex = search_regex_in_es(regex_query)
-            except Exception:
+                raw_regex_results = search_regex_in_es(regex_query)
+                
+                # Appliquer le classement sélectionné aux résultats regex
+                if ranking_method == "occurrence":
+                    results_regex = rank_by_occurrence(raw_regex_results)
+                elif ranking_method == "pagerank":
+                    results_regex = rank_by_pagerank(raw_regex_results)
+                elif ranking_method == "betweenness":
+                    results_regex = rank_by_betweenness(raw_regex_results)
+                elif ranking_method == "closeness":
+                    results_regex = rank_by_closeness(raw_regex_results)
+                    
+            except Exception as e:
+                print(f"Erreur regex: {e}")
                 results_regex = []
 
     return render(request, "searchapp/index.html", {
@@ -114,4 +212,6 @@ def index(request):
         "results_regex": results_regex,
         "keyword_index": keyword_index,
         "regex_query": regex_query,
+        "ranking_method": ranking_method,
+        "graph_stats": book_graph.get_graph_stats() if GRAPH_INITIALIZED else {"nodes": 0, "edges": 0}
     })

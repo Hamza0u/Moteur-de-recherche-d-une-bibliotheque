@@ -3,36 +3,48 @@ import time
 import re
 import os
 
-# Dossier où on sauvegarde les fichiers
 OUTPUT_DIR = "gutendex_books"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+MAX_FILENAME_LEN = 150
+RETRIES = 5
+TIMEOUT = 30  # secondes
+
 def get_books_page(page_url=None):
-    """Récupère une page de livres depuis Gutendex."""
     url = page_url if page_url else "https://gutendex.com/books/"
-    resp = requests.get(url)
-    resp.raise_for_status()
-    return resp.json()
+    for attempt in range(RETRIES):
+        try:
+            resp = requests.get(url, timeout=TIMEOUT)
+            resp.raise_for_status()
+            return resp.json()
+        except (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError) as e:
+            print(f"Erreur téléchargement page {url}: {e} (tentative {attempt+1}/{RETRIES})")
+            time.sleep(2)
+    raise Exception(f"Impossible de récupérer la page {url} après {RETRIES} tentatives")
 
 def download_plain_text(formats):
-    """Télécharge le texte brut si disponible."""
     for fmt, u in formats.items():
         if fmt.startswith("text/plain"):
-            resp = requests.get(u)
-            resp.raise_for_status()
-            return resp.text
+            for attempt in range(RETRIES):
+                try:
+                    resp = requests.get(u, timeout=TIMEOUT)
+                    resp.raise_for_status()
+                    return resp.text
+                except (requests.exceptions.RequestException, requests.exceptions.ChunkedEncodingError) as e:
+                    print(f"Erreur téléchargement {u}: {e} (tentative {attempt+1}/{RETRIES})")
+                    time.sleep(2)
     return None
 
 def sanitize_filename(name):
-    """Nettoie un nom de fichier pour enlever les caractères interdits."""
-    return re.sub(r'[\\/*?:"<>|]', "_", name)
+    name = re.sub(r'[\\/*?:"<>|]', "_", name)
+    if len(name) > MAX_FILENAME_LEN:
+        name = name[:MAX_FILENAME_LEN]
+    return name
 
 def count_words(text):
-    """Compte le nombre de mots dans un texte."""
     return len(text.split())
 
 def save_book_txt(book_id, title, text):
-    """Sauvegarde un livre dans un fichier texte."""
     title_sanitized = sanitize_filename(title)
     filename = f"{book_id}_{title_sanitized}.txt"
     filepath = os.path.join(OUTPUT_DIR, filename)
@@ -62,7 +74,7 @@ def main():
             print("Plus de pages disponibles dans l'API.")
             break
 
-        time.sleep(0.5)  # Pause pour respecter l'API
+        time.sleep(0.5)
 
     print(f"\nTerminé ! Total livres sauvegardés : {found_books_count}")
 

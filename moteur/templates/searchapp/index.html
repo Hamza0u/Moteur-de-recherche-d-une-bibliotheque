@@ -5,8 +5,6 @@
     <title>Moteur de recherche Gutenberg</title>
 
     <style>
-        /* --- Thème Gothique Roman Classique --- */
-
         body {
             font-family: "Georgia", "Garamond", serif;
             background: #f7f2e9 url('https://i.imgur.com/1zQ9ZqR.png');
@@ -44,13 +42,27 @@
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         }
 
+        form {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         input[type="text"] {
-            width: 260px;
+            flex: 1;
             padding: 10px;
             border: 2px solid #3d2c22;
             border-radius: 6px;
             background: #fffaf2;
             font-size: 15px;
+        }
+
+        select {
+            padding: 8px;
+            border: 2px solid #3d2c22;
+            border-radius: 6px;
+            background: #fffaf2;
+            font-family: "Georgia", serif;
         }
 
         button {
@@ -61,7 +73,6 @@
             color: #fcead6;
             font-weight: bold;
             cursor: pointer;
-            margin-left: 10px;
             font-family: "Georgia", serif;
         }
 
@@ -79,19 +90,32 @@
         li {
             background: rgba(255, 244, 228, 0.95);
             margin: 8px 0;
-            padding: 10px 15px;
+            padding: 15px;
             border-radius: 8px;
             border: 2px solid #3c281f;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 18px;
+            font-size: 16px;
             font-family: "Georgia", serif;
         }
 
+        .book-header {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .centrality-scores {
+            font-size: 14px;
+            color: #5a4430;
+            margin-top: 5px;
+        }
+
+        .score-item {
+            display: block;
+        }
+
         .occ {
-            font-size: 15px;
+            font-size: 14px;
             color: #6b4b38;
+            margin-top: 5px;
         }
 
         .btn {
@@ -102,12 +126,13 @@
             text-decoration: none;
             font-weight: bold;
             border: 1px solid #3b261b;
+            margin-top: 5px;
+            display: inline-block;
         }
 
         .btn:hover {
             background: #52301f;
         }
-
     </style>
 </head>
 
@@ -115,6 +140,11 @@
 
 <h1>⚜️ Moteur de Recherche Gutenberg ⚜️</h1>
 
+{% if graph_stats.nodes > 0 %}
+<div class="graph-stats" style="text-align:center; font-style:italic; margin-bottom:20px;">
+    Graphe Jaccard: {{ graph_stats.nodes }} livres, {{ graph_stats.edges }} connexions de similarité
+</div>
+{% endif %}
 
 <!-- Recherche mot-clé -->
 <div class="block">
@@ -122,6 +152,12 @@
     <form method="post">
         {% csrf_token %}
         <input type="text" name="mot" placeholder="Mot indexé" value="{{ keyword_index }}">
+        <select name="ranking_method" id="ranking_method_keyword">
+            <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
+            <option value="pagerank" {% if ranking_method == "pagerank" %}selected{% endif %}>PageRank</option>
+            <option value="betweenness" {% if ranking_method == "betweenness" %}selected{% endif %}>Betweenness</option>
+            <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
+        </select>
         <button type="submit">Rechercher</button>
     </form>
 </div>
@@ -132,6 +168,12 @@
     <form method="post">
         {% csrf_token %}
         <input type="text" name="regex" placeholder="Expression régulière" value="{{ regex_query }}">
+        <select name="ranking_method" id="ranking_method_regex">
+            <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
+            <option value="pagerank" {% if ranking_method == "pagerank" %}selected{% endif %}>PageRank</option>
+            <option value="betweenness" {% if ranking_method == "betweenness" %}selected{% endif %}>Betweenness</option>
+            <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
+        </select>
         <button type="submit">Rechercher</button>
     </form>
 </div>
@@ -142,7 +184,18 @@
     <ul>
     {% for book in results_index %}
         <li>
-            <span>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></span>
+            <div class="book-header">{{ book.title }}</div>
+
+            {% if ranking_method == "occurrence" %}
+                <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
+            {% else %}
+                <div class="centrality-scores">
+                    {% if ranking_method == "pagerank" %}<span class="score-item">PageRank: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                    {% if ranking_method == "betweenness" %}<span class="score-item">Betweenness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                    {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                </div>
+            {% endif %}
+
             <a href="{% url 'display_book' book.id %}" class="btn">Voir</a>
         </li>
     {% endfor %}
@@ -155,11 +208,35 @@
     <ul>
     {% for book in results_regex %}
         <li>
-            <span>{{ book.title }} — <span class="occ">{{ book.count }} occurrences</span></span>
+            <div class="book-header">{{ book.title }}</div>
+
+            {% if ranking_method == "occurrence" %}
+                <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
+            {% else %}
+                <div class="centrality-scores">
+                    {% if ranking_method == "pagerank" %}<span class="score-item">PageRank: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                    {% if ranking_method == "betweenness" %}<span class="score-item">Betweenness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                    {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+                </div>
+            {% endif %}
+
             <a href="{% url 'display_book' book.id %}" class="btn">Voir</a>
         </li>
     {% endfor %}
     </ul>
+{% endif %}
+
+<!-- Message si recherche sans résultats -->
+{% if keyword_index and not results_index and not results_regex %}
+    <div class="block">
+        <h3>Aucun résultat trouvé pour "{{ keyword_index }}"</h3>
+    </div>
+{% endif %}
+
+{% if regex_query and not results_regex and not results_index %}
+    <div class="block">
+        <h3>Aucun résultat trouvé pour "{{ regex_query }}"</h3>
+    </div>
 {% endif %}
 
 </body>

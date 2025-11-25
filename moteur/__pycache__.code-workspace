@@ -1,0 +1,19 @@
+{
+	"folders": [
+		{
+			"path": "__pycache__"
+		},
+		{
+			"path": "books"
+		},
+		{
+			"path": "management"
+		},
+		{
+			"path": "migrations"
+		},
+		{
+			"path": "templates"
+		}
+	]
+}
