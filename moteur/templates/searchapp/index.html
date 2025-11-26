@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Moteur de recherche Gutenberg</title>
-
     <style>
         body {
             font-family: "Georgia", "Garamond", serif;
@@ -12,26 +11,22 @@
             padding: 30px;
             color: #2b1d14;
         }
-
         h1, h2 {
             font-family: "Cinzel", serif;
             text-align: center;
             letter-spacing: 2px;
             color: #3b2a20;
         }
-
         h1 {
             font-size: 42px;
             border-bottom: 3px solid #4a3427;
             padding-bottom: 10px;
             margin-bottom: 30px;
         }
-
         h2 {
             margin-top: 30px;
             font-size: 26px;
         }
-
         .block {
             margin: 25px auto;
             padding: 20px;
@@ -41,13 +36,11 @@
             width: 80%;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         }
-
         form {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-
         input[type="text"] {
             flex: 1;
             padding: 10px;
@@ -56,7 +49,6 @@
             background: #fffaf2;
             font-size: 15px;
         }
-
         select {
             padding: 8px;
             border: 2px solid #3d2c22;
@@ -64,7 +56,6 @@
             background: #fffaf2;
             font-family: "Georgia", serif;
         }
-
         button {
             padding: 10px 18px;
             border: none;
@@ -75,18 +66,15 @@
             cursor: pointer;
             font-family: "Georgia", serif;
         }
-
         button:hover {
             background: #40281c;
         }
-
         ul {
             list-style: none;
             padding: 0;
             width: 80%;
             margin: auto;
         }
-
         li {
             background: rgba(255, 244, 228, 0.95);
             margin: 8px 0;
@@ -96,28 +84,23 @@
             font-size: 16px;
             font-family: "Georgia", serif;
         }
-
         .book-header {
             font-weight: bold;
             font-size: 18px;
         }
-
         .centrality-scores {
             font-size: 14px;
             color: #5a4430;
             margin-top: 5px;
         }
-
         .score-item {
             display: block;
         }
-
         .occ {
             font-size: 14px;
             color: #6b4b38;
             margin-top: 5px;
         }
-
         .btn {
             padding: 6px 12px;
             border-radius: 5px;
@@ -129,107 +112,248 @@
             margin-top: 5px;
             display: inline-block;
         }
-
         .btn:hover {
             background: #52301f;
         }
+        /* Style pour les suggestions */
+        .suggestion-block {
+            margin-top: 20px;
+            background: rgba(245, 235, 220, 0.95);
+            border: 2px dashed #5a4430;
+        }
+        .suggestion-title {
+            color: #5a4430;
+            font-style: italic;
+        }
+        .similarity {
+            font-size: 12px;
+            color: #8b6b4f;
+            margin-left: 10px;
+        }
+        /* Styles pour la pagination */
+        .book-item {
+            display: none;
+        }
+        .book-item.visible {
+            display: block;
+        }
+        .show-more-btn, .show-less-btn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background: #5e3d2c;
+            color: #fcead6;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: "Georgia", serif;
+            font-size: 16px;
+        }
+        .show-more-btn:hover, .show-less-btn:hover {
+            background: #40281c;
+        }
+        .show-less-btn {
+            background: #8b6b4f;
+            margin-top: 10px;
+        }
+        .show-less-btn:hover {
+            background: #6b4b38;
+        }
+        .results-count {
+            text-align: center;
+            font-style: italic;
+            color: #5a4430;
+            margin-bottom: 15px;
+        }
+        .buttons-container {
+            text-align: center;
+        }
     </style>
 </head>
-
 <body>
+    <h1>⚜️ Moteur de Recherche Gutenberg ⚜️</h1>
+    
+    {% if graph_stats.nodes > 0 %}
+    <div class="graph-stats" style="text-align:center; font-style:italic; margin-bottom:20px;">
+        Graphe Jaccard: {{ graph_stats.nodes }} livres, {{ graph_stats.edges }} connexions de similarité
+    </div>
+    {% endif %}
 
-<h1>⚜️ Moteur de Recherche Gutenberg ⚜️</h1>
+    <!-- Recherche mot-clé -->
+    <div class="block">
+        <h2>Recherche par mot-clé</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="text" name="mot" placeholder="Mot indexé" value="{{ keyword_index }}">
+            <select name="ranking_method" id="ranking_method_keyword">
+                <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
+                <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
+            </select>
+            <button type="submit">Rechercher</button>
+        </form>
+    </div>
 
-{% if graph_stats.nodes > 0 %}
-<div class="graph-stats" style="text-align:center; font-style:italic; margin-bottom:20px;">
-    Graphe Jaccard: {{ graph_stats.nodes }} livres, {{ graph_stats.edges }} connexions de similarité
-</div>
-{% endif %}
+    <!-- Recherche regex -->
+    <div class="block">
+        <h2>Recherche avec Regex</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="text" name="regex" placeholder="Expression régulière" value="{{ regex_query }}">
+            <select name="ranking_method" id="ranking_method_regex">
+                <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
+                <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
+            </select>
+            <button type="submit">Rechercher</button>
+        </form>
+    </div>
 
-<!-- Recherche mot-clé -->
-<div class="block">
-    <h2>Recherche par mot-clé</h2>
-    <form method="post">
-        {% csrf_token %}
-        <input type="text" name="mot" placeholder="Mot indexé" value="{{ keyword_index }}">
-        <select name="ranking_method" id="ranking_method_keyword">
-            <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
-            <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
-        </select>
-        <button type="submit">Rechercher</button>
-    </form>
-</div>
-
-<!-- Recherche regex -->
-<div class="block">
-    <h2>Recherche avec Regex</h2>
-    <form method="post">
-        {% csrf_token %}
-        <input type="text" name="regex" placeholder="Expression régulière" value="{{ regex_query }}">
-        <select name="ranking_method" id="ranking_method_regex">
-            <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
-            <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
-        </select>
-        <button type="submit">Rechercher</button>
-    </form>
-</div>
-
-<!-- Résultats mot-clé -->
-{% if results_index %}
+    <!-- Résultats mot-clé -->
+    {% if results_index %}
     <h2>Résultats mot-clé :</h2>
-    <ul>
-    {% for book in results_index %}
-        <li>
+    <div class="results-count">
+        {{ results_index|length }} livre{{ results_index|length|pluralize }} trouvé{{ results_index|length|pluralize }}
+    </div>
+    <ul id="keyword-results">
+        {% for book in results_index %}
+        <li class="book-item {% if forloop.counter <= 5 %}visible{% endif %}" data-index="{{ forloop.counter0 }}">
             <div class="book-header">{{ book.title }}</div>
-
             {% if ranking_method == "occurrence" %}
-                <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
+            <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
             {% else %}
-                <div class="centrality-scores">
-                    {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
-                </div>
+            <div class="centrality-scores">
+                {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+            </div>
             {% endif %}
-
             <a href="{% url 'display_book' book.id %}" class="btn">Lire</a>
         </li>
-    {% endfor %}
+        {% endfor %}
     </ul>
-{% endif %}
+    {% if results_index|length > 5 %}
+    <div class="buttons-container">
+        <button class="show-more-btn" onclick="showMore('keyword')" id="keyword-more-btn">
+            Voir plus de résultats ({{ results_index|length|add:"-5" }} restant{{ results_index|length|add:"-5"|pluralize }})
+        </button>
+        <button class="show-less-btn" onclick="showLess('keyword')" id="keyword-less-btn" style="display: none;">
+            Voir moins
+        </button>
+    </div>
+    {% endif %}
+    {% endif %}
 
-<!-- Résultats regex -->
-{% if results_regex %}
+    <!-- Résultats regex -->
+    {% if results_regex %}
     <h2>Résultats Regex :</h2>
-    <ul>
-    {% for book in results_regex %}
-        <li>
+    <div class="results-count">
+        {{ results_regex|length }} livre{{ results_regex|length|pluralize }} trouvé{{ results_regex|length|pluralize }}
+    </div>
+    <ul id="regex-results">
+        {% for book in results_regex %}
+        <li class="book-item {% if forloop.counter <= 5 %}visible{% endif %}" data-index="{{ forloop.counter0 }}">
             <div class="book-header">{{ book.title }}</div>
-
             {% if ranking_method == "occurrence" %}
-                <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
+            <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
             {% else %}
-                <div class="centrality-scores">
-                    {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
-                </div>
+            <div class="centrality-scores">
+                {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
+            </div>
             {% endif %}
-
             <a href="{% url 'display_book' book.id %}" class="btn">Voir</a>
         </li>
-    {% endfor %}
+        {% endfor %}
     </ul>
-{% endif %}
+    {% if results_regex|length > 5 %}
+    <div class="buttons-container">
+        <button class="show-more-btn" onclick="showMore('regex')" id="regex-more-btn">
+            Voir plus de résultats ({{ results_regex|length|add:"-5" }} restant{{ results_regex|length|add:"-5"|pluralize }})
+        </button>
+        <button class="show-less-btn" onclick="showLess('regex')" id="regex-less-btn" style="display: none;">
+            Voir moins
+        </button>
+    </div>
+    {% endif %}
+    {% endif %}
 
-<!-- Message si recherche sans résultats -->
-{% if keyword_index and not results_index and not results_regex %}
+    <!-- SUGGESTIONS -->
+    {% if suggestions_resultat %}
+    <div class="block suggestion-block">
+        <h2 class="suggestion-title">💡 Livres similaires suggérés</h2>
+        <p style="text-align: center; font-style: italic; color: #5a4430;">
+            Basé sur vos résultats de recherche
+        </p>
+        <ul>
+            {% for suggestion in suggestions_resultat %}
+            <li>
+                <div class="book-header">{{ suggestion.title }}</div>
+                <div class="similarity">
+                    Score de similarité: {{ suggestion.similarity|floatformat:4 }}
+                </div>
+                <a href="{% url 'display_book' suggestion.id %}" class="btn">Lire</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Message si recherche sans résultats -->
+    {% if keyword_index and not results_index and not results_regex %}
     <div class="block">
         <h3>Aucun résultat trouvé pour "{{ keyword_index }}"</h3>
     </div>
-{% endif %}
+    {% endif %}
 
-{% if regex_query and not results_regex and not results_index %}
+    {% if regex_query and not results_regex and not results_index %}
     <div class="block">
         <h3>Aucun résultat trouvé pour "{{ regex_query }}"</h3>
     </div>
-{% endif %}
+    {% endif %}
 
+    <script>
+        function showMore(type) {
+            const container = document.getElementById(`${type}-results`);
+            const hiddenItems = container.querySelectorAll('.book-item:not(.visible)');
+            const showMoreBtn = document.getElementById(`${type}-more-btn`);
+            const showLessBtn = document.getElementById(`${type}-less-btn`);
+            
+            // Affiche tous les résultats
+            hiddenItems.forEach(item => {
+                item.classList.add('visible');
+            });
+            
+            // Cache "Voir plus" et affiche "Voir moins"
+            showMoreBtn.style.display = 'none';
+            showLessBtn.style.display = 'block';
+        }
+        
+        function showLess(type) {
+            const container = document.getElementById(`${type}-results`);
+            const allItems = container.querySelectorAll('.book-item');
+            const showMoreBtn = document.getElementById(`${type}-more-btn`);
+            const showLessBtn = document.getElementById(`${type}-less-btn`);
+            
+            // Cache tous sauf les 5 premiers
+            allItems.forEach((item, index) => {
+                if (index >= 5) {
+                    item.classList.remove('visible');
+                }
+            });
+            
+            // Cache "Voir moins" et affiche "Voir plus"
+            showLessBtn.style.display = 'none';
+            showMoreBtn.style.display = 'block';
+            
+            // Met à jour le compteur sur "Voir plus"
+            const totalItems = allItems.length;
+            const remaining = totalItems - 5;
+            showMoreBtn.textContent = `Voir plus de résultats (${remaining} restant${remaining > 1 ? 's' : ''})`;
+        }
+        
+        // Optionnel : Afficher tous d'un coup avec un double-clic sur "Voir plus"
+        document.addEventListener('dblclick', function(e) {
+            if (e.target.classList.contains('show-more-btn')) {
+                const type = e.target.id.replace('-more-btn', '');
+                showMore(type);
+            }
+        });
+    </script>
 </body>
 </html>
