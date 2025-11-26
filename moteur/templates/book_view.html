@@ -3,25 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ title }}</title>
+
     <style>
+        /* --- GLOBAL PAGE STYLE --- */
         body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
-            white-space: pre-wrap; /* important pour garder les retours ligne */
+            font-family: "Georgia", "Times New Roman", serif;
+            background: #faf9f7;
+            margin: 0;
+            padding: 30px;
+            color: #2b2b2b;
+            line-height: 1.7;
         }
+
+        /* container */
+        .page {
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.08);
+        }
+
+        /* Back button */
         .back {
-            margin-bottom: 20px;
+            text-decoration: none;
+            color: #555;
+            font-size: 16px;
             display: inline-block;
+            margin-bottom: 25px;
+            transition: 0.2s;
+        }
+        .back:hover {
+            color: #000;
+            transform: translateX(-4px);
+        }
+
+        /* Title */
+        h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 25px;
+            color: #1a1a1a;
+        }
+
+        /* Book content */
+        pre {
+            font-family: "Georgia", "Times New Roman", serif;
+            white-space: pre-wrap;
+            font-size: 18px;
+            background: #f6f4f0;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #d5c9a3;
+            overflow-x: auto;
+        }
+
+        /* Responsive adaptation */
+        @media (max-width: 600px) {
+            .page {
+                padding: 20px;
+            }
+            pre {
+                font-size: 16px;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<a href="/" class="back">← Retour</a>
+<div class="page">
 
-<h1>{{ title }}</h1>
+    <a href="/" class="back">← Retour</a>
 
-<pre>{{ content }}</pre>
+    <h1>{{ title }}</h1>
+
+    <pre>{{ content }}</pre>
+
+</div>
 
 </body>
 </html>
