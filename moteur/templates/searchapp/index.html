@@ -154,8 +154,6 @@
         <input type="text" name="mot" placeholder="Mot indexé" value="{{ keyword_index }}">
         <select name="ranking_method" id="ranking_method_keyword">
             <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
-            <option value="pagerank" {% if ranking_method == "pagerank" %}selected{% endif %}>PageRank</option>
-            <option value="betweenness" {% if ranking_method == "betweenness" %}selected{% endif %}>Betweenness</option>
             <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
         </select>
         <button type="submit">Rechercher</button>
@@ -170,8 +168,6 @@
         <input type="text" name="regex" placeholder="Expression régulière" value="{{ regex_query }}">
         <select name="ranking_method" id="ranking_method_regex">
             <option value="occurrence" {% if ranking_method == "occurrence" %}selected{% endif %}>Occurrences</option>
-            <option value="pagerank" {% if ranking_method == "pagerank" %}selected{% endif %}>PageRank</option>
-            <option value="betweenness" {% if ranking_method == "betweenness" %}selected{% endif %}>Betweenness</option>
             <option value="closeness" {% if ranking_method == "closeness" %}selected{% endif %}>Closeness</option>
         </select>
         <button type="submit">Rechercher</button>
@@ -190,8 +186,6 @@
                 <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
             {% else %}
                 <div class="centrality-scores">
-                    {% if ranking_method == "pagerank" %}<span class="score-item">PageRank: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
-                    {% if ranking_method == "betweenness" %}<span class="score-item">Betweenness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
                     {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
                 </div>
             {% endif %}
@@ -214,8 +208,6 @@
                 <div class="occ">{{ book.count }} occurrence{{ book.count|pluralize }}</div>
             {% else %}
                 <div class="centrality-scores">
-                    {% if ranking_method == "pagerank" %}<span class="score-item">PageRank: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
-                    {% if ranking_method == "betweenness" %}<span class="score-item">Betweenness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
                     {% if ranking_method == "closeness" %}<span class="score-item">Closeness: {{ book.centrality_score|floatformat:6 }}</span>{% endif %}
                 </div>
             {% endif %}

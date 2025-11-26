@@ -7,39 +7,25 @@ from django.http import Http404
 
 # Import depuis management/commands
 try:
-    from .management.commands.init_graph import book_graph, initialize_graph
+    from .management.commands.init_graph import book_graph
 except ImportError:
-    # Fallback si l'import direct ne fonctionne pas
     import sys
     from pathlib import Path
     commands_path = Path(__file__).parent / 'management' / 'commands'
     sys.path.append(str(commands_path))
-    from init_graph import book_graph, initialize_graph
+    from init_graph import book_graph
 
 # --- Connexion à Elasticsearch --- #
 es = Elasticsearch("http://localhost:9200", timeout=60)
 
-# --- Initialisation du graphe --- #
-GRAPH_INITIALIZED = False
-PAGERANK_SCORES = {}
-BETWEENNESS_SCORES = {}
-CLOSENESS_SCORES = {}
+# --- Charger les scores depuis ES au démarrage du serveur --- #
+print("🔄 Chargement des scores depuis Elasticsearch...")
+CLOSENESS_SCORES = book_graph.load_scores_from_es()
 
-def ensure_graph_initialized():
-    """S'assure que le graphe est initialisé avec les scores calculés"""
-    global GRAPH_INITIALIZED, PAGERANK_SCORES, BETWEENNESS_SCORES, CLOSENESS_SCORES
-    
-    if not GRAPH_INITIALIZED:
-        print("🔄 Initialisation du graphe à la première requête...")
-        if initialize_graph():
-            GRAPH_INITIALIZED = True
-            # Pré-calculer tous les scores
-            PAGERANK_SCORES = book_graph.compute_pagerank()
-            BETWEENNESS_SCORES = book_graph.compute_betweenness() 
-            CLOSENESS_SCORES = book_graph.compute_closeness()
-            print("✅ Graphe initialisé et scores calculés!")
-        else:
-            print("❌ Échec de l'initialisation du graphe")
+if CLOSENESS_SCORES:
+    print(f"✅ Scores chargés pour {len(CLOSENESS_SCORES)} livres")
+else:
+    print("⚠️  Scores non trouvés. Lancez 'python manage.py init_graph' d'abord.")
 
 # --- Répertoire des livres --- #
 BOOKS_DIR = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")
@@ -74,7 +60,6 @@ def search_keyword_in_es(keyword):
     """Recherche un mot-clé exact dans l'index ES (gère les parties multiples)"""
     keyword_lower = keyword.lower()
     
-    # Chercher toutes les parties du mot (term exact match)
     resp = es.search(
         index="books_index",
         body={
@@ -84,18 +69,15 @@ def search_keyword_in_es(keyword):
                 }
             }
         },
-        size=100  # Au cas où le mot est découpé en plusieurs parties
+        size=100
     )
     
-    # Fusionner toutes les parties
     all_books = {}
     for hit in resp["hits"]["hits"]:
         books = hit["_source"]["books"]
         for book_id, count in books.items():
-            # Si le livre existe déjà, additionner les occurrences
             all_books[book_id] = all_books.get(book_id, 0) + count
     
-    # Formater les résultats
     results = [
         {
             "id": book_id,
@@ -109,30 +91,25 @@ def search_keyword_in_es(keyword):
 
 def search_regex_in_es(pattern):
     """Recherche regex sur l'index inversé (gère les parties multiples)"""
-    # Récupérer TOUT l'index
     resp = es.search(
         index="books_index",
         body={"query": {"match_all": {}}},
-        size=10000  # Ajuster si besoin
+        size=10000
     )
     
-    # Construire un index temporaire en fusionnant les parties
     temp_index = {}
     for hit in resp["hits"]["hits"]:
         term = hit["_source"]["term"]
         books = hit["_source"]["books"]
         
-        # Si le terme existe déjà (cas des parties multiples), fusionner
         if term in temp_index:
             for book_id, count in books.items():
                 temp_index[term][book_id] = temp_index[term].get(book_id, 0) + count
         else:
             temp_index[term] = dict(books)
     
-    # Appliquer le regex
     results = search_regex_in_index(pattern, temp_index)
     
-    # Ajouter les titres
     for entry in results:
         book_id = str(entry["id"])
         entry["title"] = BOOK_INFO.get(book_id, f"Livre {book_id}")
@@ -143,41 +120,11 @@ def rank_by_occurrence(results):
     """Classe les résultats par nombre d'occurrences"""
     return sorted(results, key=lambda x: x["count"], reverse=True)
 
-def rank_by_pagerank(results):
-    """Classe les résultats par PageRank"""
-    ensure_graph_initialized()
-    
-    ranked_results = []
-    for result in results:
-        book_id = str(result["id"])
-        pagerank = PAGERANK_SCORES.get(book_id, 0)
-        ranked_results.append({
-            **result,
-            "centrality_score": pagerank,
-            "score_type": "PageRank"
-        })
-    
-    return sorted(ranked_results, key=lambda x: x["centrality_score"], reverse=True)
-
-def rank_by_betweenness(results):
-    """Classe les résultats par betweenness centrality"""
-    ensure_graph_initialized()
-    
-    ranked_results = []
-    for result in results:
-        book_id = str(result["id"])
-        betweenness = BETWEENNESS_SCORES.get(book_id, 0)
-        ranked_results.append({
-            **result,
-            "centrality_score": betweenness,
-            "score_type": "Betweenness"
-        })
-    
-    return sorted(ranked_results, key=lambda x: x["centrality_score"], reverse=True)
-
 def rank_by_closeness(results):
-    """Classe les résultats par closeness centrality"""
-    ensure_graph_initialized()
+    """Classe les résultats par closeness (charge depuis ES)"""
+    if CLOSENESS_SCORES is None:
+        print("⚠️  Scores Closeness non disponibles")
+        return rank_by_occurrence(results)
     
     ranked_results = []
     for result in results:
@@ -200,7 +147,6 @@ def index(request):
     ranking_method = "occurrence"
 
     if request.method == "POST":
-        # Récupérer la méthode de classement
         ranking_method = request.POST.get("ranking_method", "occurrence")
         keyword_index = request.POST.get("mot", "").strip()
         regex_query = request.POST.get("regex", "").strip()
@@ -213,13 +159,8 @@ def index(request):
                 raw_results = search_keyword_in_es(keyword_index)
                 print(f"📊 Résultats trouvés: {len(raw_results)}")
                 
-                # Appliquer le classement sélectionné
                 if ranking_method == "occurrence":
                     results_index = rank_by_occurrence(raw_results)
-                elif ranking_method == "pagerank":
-                    results_index = rank_by_pagerank(raw_results)
-                elif ranking_method == "betweenness":
-                    results_index = rank_by_betweenness(raw_results)
                 elif ranking_method == "closeness":
                     results_index = rank_by_closeness(raw_results)
             except Exception as e:
@@ -234,13 +175,8 @@ def index(request):
                 raw_regex_results = search_regex_in_es(regex_query)
                 print(f"📊 Résultats regex trouvés: {len(raw_regex_results)}")
                 
-                # Appliquer le classement sélectionné aux résultats regex
                 if ranking_method == "occurrence":
                     results_regex = rank_by_occurrence(raw_regex_results)
-                elif ranking_method == "pagerank":
-                    results_regex = rank_by_pagerank(raw_regex_results)
-                elif ranking_method == "betweenness":
-                    results_regex = rank_by_betweenness(raw_regex_results)
                 elif ranking_method == "closeness":
                     results_regex = rank_by_closeness(raw_regex_results)
             except Exception as e:
@@ -253,5 +189,5 @@ def index(request):
         "keyword_index": keyword_index,
         "regex_query": regex_query,
         "ranking_method": ranking_method,
-        "graph_stats": book_graph.get_graph_stats() if GRAPH_INITIALIZED else {"nodes": 0, "edges": 0}
+        "graph_stats": book_graph.get_graph_stats()
     })
