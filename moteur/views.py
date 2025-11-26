@@ -62,6 +62,36 @@ def display_book(request, book_id):
             })
     raise Http404("Livre introuvable")
 
+# --- ALGORITHME KMP ---
+def kmp_search(pattern, text):
+    """Algorithme KMP pour recherche de motif - Complexité O(n+m)"""
+    n, m = len(text), len(pattern)
+    if m == 0: 
+        return False
+    if m > n: 
+        return False
+    
+    # Précalcul du tableau LPS (Longest Prefix Suffix)
+    lps = [0] * m
+    j = 0
+    for i in range(1, m):
+        while j > 0 and pattern[i] != pattern[j]:
+            j = lps[j-1]
+        if pattern[i] == pattern[j]:
+            j += 1
+            lps[i] = j
+    
+    # Recherche du motif dans le texte
+    j = 0
+    for i in range(n):
+        while j > 0 and text[i] != pattern[j]:
+            j = lps[j-1]
+        if text[i] == pattern[j]:
+            j += 1
+        if j == m:
+            return True
+    return False
+
 def search_keyword_in_es(keyword):
     """Recherche un mot-clé exact dans l'index ES (gère les parties multiples)"""
     keyword_lower = keyword.lower()
@@ -91,6 +121,81 @@ def search_keyword_in_es(keyword):
         for book_id, count in all_books.items()
     ]
     return results
+
+def search_keyword_kmp(keyword):
+    """Recherche un mot-clé avec KMP dans l'index ES (recherche partielle)"""
+    keyword_lower = keyword.lower()
+    print(f"🔍 Recherche KMP pour: '{keyword_lower}'")
+    
+    # Récupère tous les termes de l'index
+    resp = es.search(
+        index="books_index",
+        body={"query": {"match_all": {}}},
+        size=10000
+    )
+    
+    matching_terms = {}
+    total_terms_checked = 0
+    matches_found = 0
+    
+    for hit in resp["hits"]["hits"]:
+        term = hit["_source"]["term"]
+        books = hit["_source"]["books"]
+        total_terms_checked += 1
+        
+        # Utilise KMP pour la recherche partielle
+        if kmp_search(keyword_lower, term):
+            matches_found += 1
+            for book_id, count in books.items():
+                matching_terms[book_id] = matching_terms.get(book_id, 0) + count
+    
+    print(f"📊 KMP: {matches_found} termes trouvés sur {total_terms_checked} vérifiés")
+    
+    results = [
+        {
+            "id": book_id,
+            "title": BOOK_INFO.get(book_id, f"Livre {book_id}"),
+            "count": count
+        }
+        for book_id, count in matching_terms.items()
+    ]
+    
+    return results
+
+def search_keyword_optimized(keyword):
+    """Recherche hybride : d'abord exacte, puis KMP si peu de résultats"""
+    keyword_lower = keyword.lower()
+    
+    # 1. Essai recherche exacte (ultra rapide)
+    print(f"🎯 Recherche exacte pour: '{keyword_lower}'")
+    exact_results = search_keyword_in_es(keyword_lower)
+    print(f"✅ Recherche exacte: {len(exact_results)} résultats")
+    
+    # Si suffisamment de résultats, on s'arrête là
+    if len(exact_results) >= 8:
+        return exact_results
+    
+    # 2. Si pas assez de résultats, utilise KMP pour recherche partielle
+    print(f"🔍 Pas assez de résultats → Lancement recherche KMP...")
+    kmp_results = search_keyword_kmp(keyword_lower)
+    
+    # Combine et déduplique les résultats
+    all_results = {}
+    for result in exact_results:
+        all_results[result["id"]] = result
+    
+    for result in kmp_results:
+        book_id = result["id"]
+        if book_id in all_results:
+            # Si le livre était déjà dans les résultats exacts, on additionne les counts
+            all_results[book_id]["count"] += result["count"]
+        else:
+            all_results[book_id] = result
+    
+    final_results = list(all_results.values())
+    print(f"📈 Résultats combinés: {len(final_results)} livres")
+    
+    return final_results
 
 def search_regex_in_es(pattern):
     """Recherche regex sur l'index inversé (gère les parties multiples)"""
@@ -197,7 +302,8 @@ def index(request):
         if keyword_index:
             print(f"🔍 Recherche du mot: {keyword_index}")
             try:
-                raw_results = search_keyword_in_es(keyword_index)
+                # UTILISE LA NOUVELLE FONCTION AVEC KMP
+                raw_results = search_keyword_optimized(keyword_index)
                 print(f"📊 Résultats trouvés: {len(raw_results)}")
                 
                 if ranking_method == "occurrence":

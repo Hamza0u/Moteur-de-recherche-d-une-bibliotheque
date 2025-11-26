@@ -6,7 +6,7 @@
     <style>
         body {
             font-family: "Georgia", "Garamond", serif;
-            background: #f7f2e9 url('https://i.imgur.com/1zQ9ZqR.png');
+            background: #f7f2e9;
             background-size: cover;
             padding: 30px;
             color: #2b1d14;
@@ -173,12 +173,6 @@
 <body>
     <h1>⚜️ Moteur de Recherche Gutenberg ⚜️</h1>
     
-    {% if graph_stats.nodes > 0 %}
-    <div class="graph-stats" style="text-align:center; font-style:italic; margin-bottom:20px;">
-        Graphe Jaccard: {{ graph_stats.nodes }} livres, {{ graph_stats.edges }} connexions de similarité
-    </div>
-    {% endif %}
-
     <!-- Recherche mot-clé -->
     <div class="block">
         <h2>Recherche par mot-clé</h2>
