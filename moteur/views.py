@@ -301,6 +301,7 @@ def index(request):
     ranking_method = "occurrence"
     search_time = 0
     regex_time = 0 
+    total_time=0
 
     if request.method == "POST":
         ranking_method = request.POST.get("ranking_method", "occurrence")
