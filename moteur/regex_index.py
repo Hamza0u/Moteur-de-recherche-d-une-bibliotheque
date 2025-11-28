@@ -1,6 +1,3 @@
-# Moteur regex basé sur NFA -> DFA pour recherche dans l'index
-# Inspiré du script egrep_clone fourni par l'utilisateur.
-
 ANY = "__ANY__"
 
 

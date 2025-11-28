@@ -24,19 +24,19 @@ except ImportError:
 es = Elasticsearch("http://localhost:9200", timeout=60)
 
 # --- Charger les scores et le graphe depuis ES au démarrage du serveur ---
-print("🔄 Chargement des scores depuis Elasticsearch...")
+print("Chargement des scores depuis Elasticsearch...")
 CLOSENESS_SCORES = book_graph.load_scores_from_es()
 if CLOSENESS_SCORES:
-    print(f"✅ Scores chargés pour {len(CLOSENESS_SCORES)} livres")
+    print(f"Scores chargés pour {len(CLOSENESS_SCORES)} livres")
 else:
-    print("⚠️ Scores non trouvés. Lancez 'python manage.py init_graph' d'abord.")
+    print("Scores non trouvés. Lancez 'python manage.py init_graph' d'abord.")
 
-print("🔄 Chargement du graphe Jaccard depuis Elasticsearch...")
+print("Chargement du graphe Jaccard depuis Elasticsearch...")
 GRAPH_LOADED = book_graph.load_graph_from_es()
 if GRAPH_LOADED:
-    print(f"✅ Graphe Jaccard chargé: {len(book_graph.graph)} livres")
+    print(f" Graphe Jaccard chargé: {len(book_graph.graph)} livres")
 else:
-    print("⚠️ Graphe Jaccard non trouvé. Lancez 'python manage.py init_graph' d'abord.")
+    print(" Graphe Jaccard non trouvé. Lancez 'python manage.py init_graph' d'abord.")
 
 # --- Répertoire des livres ---
 BOOKS_DIR = os.path.join(settings.BASE_DIR, "moteur", "books", "gutendex_books")
@@ -129,7 +129,7 @@ def search_keyword_in_es(keyword):
 def search_keyword_kmp(keyword):
     """Recherche un mot-clé avec KMP dans l'index ES (recherche partielle)"""
     keyword_lower = keyword.lower()
-    print(f"🔍 Recherche KMP pour: '{keyword_lower}'")
+    print(f"Recherche KMP pour: '{keyword_lower}'")
     
     # Récupère tous les termes de l'index
     resp = es.search(
@@ -153,7 +153,7 @@ def search_keyword_kmp(keyword):
             for book_id, count in books.items():
                 matching_terms[book_id] = matching_terms.get(book_id, 0) + count
     
-    print(f"📊 KMP: {matches_found} termes trouvés sur {total_terms_checked} vérifiés")
+    print(f"KMP: {matches_found} termes trouvés sur {total_terms_checked} vérifiés")
     
     results = [
         {
@@ -171,16 +171,16 @@ def search_keyword_optimized(keyword):
     keyword_lower = keyword.lower()
     
     # 1. Essai recherche exacte (ultra rapide)
-    print(f"🎯 Recherche exacte pour: '{keyword_lower}'")
+    print(f"Recherche exacte pour: '{keyword_lower}'")
     exact_results = search_keyword_in_es(keyword_lower)
-    print(f"✅ Recherche exacte: {len(exact_results)} résultats")
+    print(f"Recherche exacte: {len(exact_results)} résultats")
     
     # Si suffisamment de résultats, on s'arrête là
     if len(exact_results) >= 8:
         return exact_results
     
     # 2. Si pas assez de résultats, utilise KMP pour recherche partielle
-    print(f"🔍 Pas assez de résultats → Lancement recherche KMP...")
+    print(f"Pas assez de résultats → Lancement recherche KMP...")
     kmp_results = search_keyword_kmp(keyword_lower)
     
     # Combine et déduplique les résultats
@@ -197,7 +197,7 @@ def search_keyword_optimized(keyword):
             all_results[book_id] = result
     
     final_results = list(all_results.values())
-    print(f"📈 Résultats combinés: {len(final_results)} livres")
+    print(f"Résultats combinés: {len(final_results)} livres")
     
     return final_results
 
@@ -231,7 +231,7 @@ def rank_by_occurrence(results):
 def rank_by_closeness(results):
     """Classe les résultats par closeness (charge depuis ES)"""
     if CLOSENESS_SCORES is None:
-        print("⚠️ Scores Closeness non disponibles")
+        print("Scores Closeness non disponibles")
         return rank_by_occurrence(results)
     
     ranked_results = []
@@ -253,12 +253,12 @@ def get_suggestions_from_results(results):
     
     # Vérifie si le graphe est chargé
     if not hasattr(book_graph, 'graph') or not book_graph.graph:
-        print("❌ Graphe Jaccard non chargé")
+        print("Graphe Jaccard non chargé")
         return []
     
     # Prend les 3 premiers résultats
     top_3_books = [str(book["id"]) for book in results[:3]]
-    print(f"🔍 Recherche suggestions pour: {top_3_books}")
+    print(f"Recherche suggestions pour: {top_3_books}")
     
     suggestions_resultat = []
     
@@ -285,7 +285,7 @@ def get_suggestions_from_results(results):
     # Trie par similarité et prend les 5 meilleures
     sorted_suggestions = sorted(unique_suggestions.values(), key=lambda x: x["similarity"], reverse=True)[:5]
     
-    print(f"✅ {len(sorted_suggestions)} suggestions générées")
+    print(f"{len(sorted_suggestions)} suggestions générées")
     return sorted_suggestions
 
 # --- View principale ---
@@ -325,10 +325,10 @@ def index(request):
                 
                 # Génère les suggestions
                 suggestions_resultat = get_suggestions_from_results(results_index)
-                print(f"💡 {len(suggestions_resultat)} suggestions générées")
+                print(f" {len(suggestions_resultat)} suggestions générées")
                 
             except Exception as e:
-                print(f"❌ Erreur recherche mot-clé: {e}")
+                print(f" Erreur recherche mot-clé: {e}")
                 results_index = []
 
         # ----- Recherche regex -----
@@ -338,7 +338,7 @@ def index(request):
                 t0 = time.time()
                 raw_regex_results = search_regex_in_es(regex_query)
                 regex_time = time.time() - t0
-                print(f"📊 Résultats regex trouvés: {len(raw_regex_results)}")
+                print(f"Résultats regex trouvés: {len(raw_regex_results)}")
                 
                 if ranking_method == "occurrence":
                     results_regex = rank_by_occurrence(raw_regex_results)
@@ -348,10 +348,10 @@ def index(request):
                 # Génère les suggestions (si pas déjà fait par la recherche mot-clé)
                 if not suggestions_resultat:
                     suggestions_resultat = get_suggestions_from_results(results_regex)
-                    print(f"💡 {len(suggestions_resultat)} suggestions regex générées")
+                    print(f" {len(suggestions_resultat)} suggestions regex générées")
                     
             except Exception as e:
-                print(f"❌ Erreur regex: {e}")
+                print(f"Erreur regex: {e}")
                 results_regex = []
 
         total_time = time.time() - start_time_total

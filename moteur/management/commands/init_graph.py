@@ -70,7 +70,7 @@ class BookGraph:
                     }
                 }
             })
-            print("✅ Index 'jaccard_graph' créé")
+            print("Index 'jaccard_graph' créé")
         
         # Sauvegarder chaque livre avec ses voisins
         from elasticsearch.helpers import bulk
@@ -86,15 +86,15 @@ class BookGraph:
             })
         
         success, failed = bulk(self.es, actions, raise_on_error=False)
-        print(f"✅ Graphe sauvegardé: {success} livres, {len(failed)} échecs")
+        print(f"Graphe sauvegardé: {success} livres, {len(failed)} échecs")
         return success
 
     def load_graph_from_es(self):
         """Charge le graphe Jaccard depuis Elasticsearch"""
-        print("🔄 Chargement du graphe Jaccard depuis Elasticsearch...")
+        print("Chargement du graphe Jaccard depuis Elasticsearch...")
         
         if not self.es.indices.exists(index="jaccard_graph"):
-            print("❌ Index 'jaccard_graph' non trouvé")
+            print("Index 'jaccard_graph' non trouvé")
             return False
         
         # Charger tous les documents
@@ -111,7 +111,7 @@ class BookGraph:
             neighbors = source.get("neighbors", {})
             self.graph[book_id] = neighbors
         
-        print(f"✅ Graphe chargé: {len(self.graph)} livres")
+        print(f"Graphe chargé: {len(self.graph)} livres")
         return len(self.graph) > 0
 
     def compute_closeness(self):
@@ -158,7 +158,7 @@ class BookGraph:
 
     def save_scores_to_es(self, closeness):
         """Sauvegarde les scores dans Elasticsearch"""
-        print("\n💾 Sauvegarde des scores dans Elasticsearch...")
+        print("\nSauvegarde des scores dans Elasticsearch...")
         if not self.es.indices.exists(index="book_scores"):
             self.es.indices.create(index="book_scores", body={
                 "mappings": {
@@ -168,7 +168,7 @@ class BookGraph:
                     }
                 }
             })
-            print("✅ Index 'book_scores' créé")
+            print("Index 'book_scores' créé")
             
         from elasticsearch.helpers import bulk
         actions = []
@@ -182,7 +182,7 @@ class BookGraph:
                 }
             })
         bulk(self.es, actions)
-        print(f"✅ Scores sauvegardés pour {len(actions)} livres")
+        print(f"Scores sauvegardés pour {len(actions)} livres")
 
     def load_scores_from_es(self):
         """Charge les scores depuis Elasticsearch"""
@@ -215,27 +215,27 @@ def initialize_graph():
     """Initialise le graphe et sauvegarde les scores dans ES"""
     try:
         book_graph.build_jaccard_graph()
-        print("\n📊 Calcul de la closeness centrality...")
+        print("\nCalcul de la closeness centrality...")
         closeness = book_graph.compute_closeness()
         book_graph.save_scores_to_es(closeness)
         book_graph.save_graph_to_es()  # NOUVEAU: Sauvegarde le graphe
-        print("\n✅ Graphe Jaccard initialisé et sauvegardé dans ES!")
+        print("\nGraphe Jaccard initialisé et sauvegardé dans ES!")
         return True
     except Exception as e:
-        print(f"❌ Erreur lors de l'initialisation du graphe: {e}")
+        print(f"Erreur lors de l'initialisation du graphe: {e}")
         return False
 
 class Command(BaseCommand):
     help = 'Initialise le graphe de similarité Jaccard'
 
     def handle(self, *args, **options):
-        self.stdout.write('🔄 Initialisation du graphe Jaccard...')
+        self.stdout.write('Initialisation du graphe Jaccard...')
         success = initialize_graph()
         if success:
             self.stdout.write(
-                self.style.SUCCESS('✅ Graphe initialisé avec succès!')
+                self.style.SUCCESS(' Graphe initialisé avec succès!')
             )
         else:
             self.stdout.write(
-                self.style.ERROR('❌ Erreur lors de l\'initialisation du graphe')
+                self.style.ERROR(' Erreur lors de l\'initialisation du graphe')
             )
