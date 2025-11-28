@@ -5,6 +5,10 @@ from django.conf import settings
 from elasticsearch import Elasticsearch
 from .regex_index import search_regex_in_index
 from django.http import Http404
+import time
+import csv
+
+
 
 # Import depuis management/commands
 try:
@@ -286,9 +290,12 @@ def get_suggestions_from_results(results):
 
 # --- View principale ---
 def index(request):
+
+    start_time_total = time.time()  # Temps total
+
     results_index = []
     results_regex = []
-    suggestions_resultat = []  # ← Stocke les suggestions
+    suggestions_resultat = []  # Stocke les suggestions
     keyword_index = ""
     regex_query = ""
     ranking_method = "occurrence"
@@ -302,8 +309,11 @@ def index(request):
         if keyword_index:
             print(f"🔍 Recherche du mot: {keyword_index}")
             try:
+                t0 = time.time()
                 # UTILISE LA NOUVELLE FONCTION AVEC KMP
                 raw_results = search_keyword_optimized(keyword_index)
+                search_time = time.time() - t0   # ← Temps de recherche
+
                 print(f"📊 Résultats trouvés: {len(raw_results)}")
                 
                 if ranking_method == "occurrence":
@@ -323,7 +333,9 @@ def index(request):
         if regex_query:
             print(f"🔍 Recherche regex: {regex_query}")
             try:
+                t0 = time.time()
                 raw_regex_results = search_regex_in_es(regex_query)
+                regex_time = time.time() - t0
                 print(f"📊 Résultats regex trouvés: {len(raw_regex_results)}")
                 
                 if ranking_method == "occurrence":
@@ -340,10 +352,18 @@ def index(request):
                 print(f"❌ Erreur regex: {e}")
                 results_regex = []
 
+        total_time = time.time() - start_time_total
+
+
+    with open("performance_log.csv", "a") as f:
+        writer = csv.writer(f)
+        writer.writerow([keyword_index, regex_query, search_time, regex_time, total_time])
+
+
     return render(request, "searchapp/index.html", {
         "results_index": results_index,
         "results_regex": results_regex,
-        "suggestions_resultat": suggestions_resultat,  # ← Passe les suggestions au template
+        "suggestions_resultat": suggestions_resultat,  # Passe les suggestions au template
         "keyword_index": keyword_index,
         "regex_query": regex_query,
         "ranking_method": ranking_method,
