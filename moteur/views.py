@@ -317,7 +317,7 @@ def index(request):
                 raw_results = search_keyword_optimized(keyword_index)
                 search_time = time.time() - t0   # ← Temps de recherche
 
-                print(f"📊 Résultats trouvés: {len(raw_results)}")
+                print(f"Résultats trouvés: {len(raw_results)}")
                 
                 if ranking_method == "occurrence":
                     results_index = rank_by_occurrence(raw_results)
@@ -334,7 +334,7 @@ def index(request):
 
         # ----- Recherche regex -----
         if regex_query:
-            print(f"🔍 Recherche regex: {regex_query}")
+            print(f" Recherche regex: {regex_query}")
             try:
                 t0 = time.time()
                 raw_regex_results = search_regex_in_es(regex_query)
@@ -358,10 +358,12 @@ def index(request):
         total_time = time.time() - start_time_total
 
 
-    with open("performance_log.csv", "a") as f:
+    #sauvegarde des performances    
+    log_path = os.path.join(settings.BASE_DIR, "performance_log.csv")
+
+    with open(log_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([keyword_index, regex_query, search_time, regex_time, total_time])
-
 
     return render(request, "searchapp/index.html", {
         "results_index": results_index,
