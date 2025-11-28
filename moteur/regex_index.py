@@ -208,49 +208,64 @@ def build_dfa_from_regex(pattern):
     return dfa
 
 
-def match_dfa_full(dfa_start, text):
-    """Retourne True si *tout* le mot `text` matche la regex (pas seulement un sous-mot)."""
+def match_dfa_partial(dfa_start, text):
+    """
+    Matching PARTIEL : la regex peut matcher n'importe quelle partie du texte.
+    Retourne True si au moins une sous-chaîne de `text` matche la regex.
+    """
     if dfa_start is None:
         return False
-    current = dfa_start
-    for c in text:
-        found = False
-        for key, next_state in current.transitions.items():
-            if key == ANY or key == c:
-                current = next_state
-                found = True
-                break
-        if not found:
-            return False
-    return current.end
+    
+    # On teste toutes les positions de départ possibles
+    for start_pos in range(len(text)):
+        current = dfa_start
+        
+        for char_pos in range(start_pos, len(text)):
+            char = text[char_pos]
+            next_state = None
+            
+            # Chercher une transition pour ce caractère
+            if char in current.transitions:
+                next_state = current.transitions[char]
+            elif ANY in current.transitions:
+                next_state = current.transitions[ANY]
+            
+            if next_state is None:
+                break  # Plus de transitions possibles depuis cette position
+                
+            current = next_state
+            
+            # Si on atteint un état accepteur à n'importe quel moment → match
+            if current.end:
+                return True
+    
+    return False
 
 
 def search_regex_in_index(pattern, index):
     """
     pattern : regex entrée par l'utilisateur
-    index   : dict {word: {book_id: count, ...}, ...}
+    index   : dict {normalized_word: {book_id: count, ...}, ...}
 
-    Utilise le DFA pour trouver tous les mots de l'index qui
-    matche la regex, puis agrège les occurrences par livre.
-
-    Retourne une liste de dicts :
-        [ {'id': book_id, 'count': total_occ}, ... ]
-    triée par nombre d'occurrences décroissant.
+    Retourne : list of {'id': book_id, 'count': total}
     """
     dfa = build_dfa_from_regex(pattern)
     if dfa is None:
+        print(f"❌ Regex invalide: {pattern}")
         return []
 
-    book_counts = {}   # book_id -> somme des occurrences pour tous les mots matchés
-
+    book_counts = {}
+    matched_words = []
+    
     for word, postings in index.items():
-        if match_dfa_full(dfa, word):
+        # ⭐⭐ UTILISE match_dfa_partial au lieu de match_dfa_full ⭐⭐
+        if match_dfa_partial(dfa, word):
+            matched_words.append(word)
             for book_id, count in postings.items():
                 book_counts[book_id] = book_counts.get(book_id, 0) + count
 
-    results = [
-        {'id': int(book_id), 'count': count}
-        for book_id, count in book_counts.items()
-    ]
+    print(f"📊 Regex '{pattern}' - {len(matched_words)} mots matchés: {matched_words[:10]}...")
+
+    results = [{'id': book_id, 'count': count} for book_id, count in book_counts.items()]
     results.sort(key=lambda x: x['count'], reverse=True)
     return results

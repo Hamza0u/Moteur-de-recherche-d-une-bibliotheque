@@ -3,12 +3,11 @@ from collections import defaultdict
 from django.shortcuts import render
 from django.conf import settings
 from elasticsearch import Elasticsearch
+from elasticsearch.helpers import scan
 from .regex_index import search_regex_in_index
 from django.http import Http404
 import time
 import csv
-
-
 
 # Import depuis management/commands
 try:
@@ -131,18 +130,21 @@ def search_keyword_kmp(keyword):
     keyword_lower = keyword.lower()
     print(f"Recherche KMP pour: '{keyword_lower}'")
     
-    # Récupère tous les termes de l'index
-    resp = es.search(
+    # ⭐⭐ REMPLACÉ es.search() par scan() pour TOUS les documents ⭐⭐
+    resp_iter = scan(
+        client=es,
         index="books_index",
-        body={"query": {"match_all": {}}},
-        size=10000
+        query={"query": {"match_all": {}}},
+        preserve_order=False,
+        clear_scroll=True,
+        request_timeout=120
     )
     
     matching_terms = {}
     total_terms_checked = 0
     matches_found = 0
     
-    for hit in resp["hits"]["hits"]:
+    for hit in resp_iter:
         term = hit["_source"]["term"]
         books = hit["_source"]["books"]
         total_terms_checked += 1
@@ -203,13 +205,18 @@ def search_keyword_optimized(keyword):
 
 def search_regex_in_es(pattern):
     """Recherche regex sur l'index inversé (gère les parties multiples)"""
-    resp = es.search(
+    # ⭐⭐ REMPLACÉ es.search() par scan() pour TOUS les documents ⭐⭐
+    resp_iter = scan(
+        client=es,
         index="books_index",
-        body={"query": {"match_all": {}}},
-        size=10000
+        query={"query": {"match_all": {}}},
+        preserve_order=False,
+        clear_scroll=True,
+        request_timeout=120
     )
+    
     temp_index = {}
-    for hit in resp["hits"]["hits"]:
+    for hit in resp_iter:
         term = hit["_source"]["term"]
         books = hit["_source"]["books"]
         if term in temp_index:
